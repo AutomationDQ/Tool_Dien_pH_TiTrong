@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Điền pH & Tỉ trọng</title>
+<style>
+/* VOICE: công cụ văn phòng, gọn, rõ
+   IDEA: tờ phiếu kết quả xét nghiệm
+   PICTURE: hai ô thả file + bảng đối chiếu
+   COLOUR/TYPE: trắng đen + mint, Inter hệ thống
+   LAYOUT: một cột, tiêu đề, 2 ô thả, nút, bảng */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0d0f0e);--ink:light-dark(#111,#eef3f0);--mut:light-dark(#5b625e,#9aa39e);--line:light-dark(#e3e6e4,#2a2e2c);--mint:#b8f5d0;--mintd:light-dark(#0f6b3a,#8ff0b9);--bad:light-dark(#b42318,#ff8a80);--warn:light-dark(#9a6700,#f5c451)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(20px,4vw,48px) max(4vw,16px)}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.1;margin:0 0 6px}
+.sub{color:var(--mut);margin:0 0 24px}
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:22px;min-height:130px;cursor:pointer;transition:background .15s,border-color .15s;position:relative}
+.drop:hover,.drop.over{border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 18%,transparent)}
+.drop.ok{border-style:solid;border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 28%,transparent)}
+.drop b{display:block;font-size:17px}.drop small{color:var(--mut)}.drop .fn{margin-top:8px;font-weight:600;word-break:break-all}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:20px 0}
+button{font:inherit;font-weight:600;min-height:44px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;background:var(--ink);color:var(--bg)}
+button.alt{background:var(--mint);color:#06301a}button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible,.drop:focus-within{outline:3px solid var(--mintd);outline-offset:2px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.st{padding:10px 16px;border-radius:10px;background:color-mix(in srgb,var(--mint) 30%,transparent)}.st span{font-size:24px;font-weight:700;margin-right:6px}
+.st.b{background:color-mix(in srgb,var(--bad) 14%,transparent)}
+#log{color:var(--mut);font-size:14px;margin:12px 0;white-space:pre-line}
+#err{color:var(--bad);font-weight:600;white-space:pre-line}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;max-height:60vh}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--bg);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.x td{color:var(--bad)}tr.w td{color:var(--warn)}
+.flt{display:flex;gap:6px;margin:14px 0 8px;flex-wrap:wrap}.flt button{min-height:36px;padding:0 14px;background:transparent;color:var(--ink);border:1px solid var(--line)}.flt button.on{background:var(--ink);color:var(--bg)}
+.note{font-size:13px;color:var(--mut);margin-top:22px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><div class="wrap">
+<h1>Điền pH & tỉ trọng vào danh sách công ty</h1>
+<p class="sub">Thả phiếu xét nghiệm (.xls) và file công ty (.xlsx). Tool tìm theo số thứ tự, đối chiếu đúng họ tên rồi mới điền tỉ trọng (3 số lẻ) và pH, không làm tròn.</p>
+<div class="drops">
+ <label class="drop" id="dXn"><input type="file" accept=".xls" data-k="xn"><b>1. Phiếu xét nghiệm</b><small>File .xls có ô SỐ THỨ TỰ</small><div class="fn"></div></label>
+ <label class="drop" id="dJb"><input type="file" accept=".xlsx" data-k="jb"><b>2. File công ty</b><small>File .xlsx có cột “tỷ trọng” và “pH”</small><div class="fn"></div></label>
+</div>
+<div class="bar"><button id="run" disabled>Chạy đối chiếu</button><button id="dl" class="alt" disabled>Tải file đã điền</button><button id="reset" style="background:transparent;color:var(--ink);border:1px solid var(--line)">Làm lại</button></div>
+<div id="err"></div><div class="stats" id="stats"></div><div id="log"></div>
+<div id="res" hidden><div class="flt" id="flt"><button data-f="all" class="on">Tất cả</button><button data-f="bad">Chỉ dòng có vấn đề</button></div>
+<div class="scroll"><table><thead><tr><th>STT</th><th>Dòng</th><th>Họ tên (file công ty)</th><th>Họ tên (phiếu)</th><th>Tỉ trọng</th><th>pH</th><th>Trạng thái</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<p class="note">Chạy hoàn toàn trên máy bạn, không gửi dữ liệu đi đâu. Nếu báo không tìm thấy số liệu: mở phiếu xét nghiệm trong Excel → Data → Edit Links → Update Values, lưu lại rồi chạy lại.</p>
+</div>
+<script>
+// ===== Core: đọc cache liên kết ngoài trong .xls (BIFF8) + ghi tỉ trọng/pH vào .xlsx =====
+const XLCore = (() => {
+  const td = new TextDecoder('utf-8');
+  const te = new TextEncoder();
+  const nfc = s => String(s ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+  const norm = s => nfc(s).toLowerCase();
+
+  // ---------- CFB (OLE2) ----------
+  function readCFB(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const sig = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    for (let i = 0; i < 8; i++) if (u8[i] !== sig[i]) throw new Error('File xét nghiệm không phải định dạng .xls (Excel 97-2003).');
+    const secSize = 1 << dv.getUint16(30, true), miniSize = 1 << dv.getUint16(32, true);
+    const nFat = dv.getUint32(44, true), dirStart = dv.getUint32(48, true);
+    const miniCutoff = dv.getUint32(56, true), miniFatStart = dv.getUint32(60, true), nMiniFat = dv.getUint32(64, true);
+    let difStart = dv.getUint32(68, true), nDif = dv.getUint32(72, true);
+    const off = s => (s + 1) * secSize;
+    const fatSecs = [];
+    for (let i = 0; i < 109 && fatSecs.length < nFat; i++) fatSecs.push(dv.getUint32(76 + i * 4, true));
+    while (nDif-- > 0 && difStart < 0xFFFFFFFA) {
+      const o = off(difStart), n = secSize / 4 - 1;
+      for (let i = 0; i < n && fatSecs.length < nFat; i++) fatSecs.push(dv.getUint32(o + i * 4, true));
+      difStart = dv.getUint32(o + n * 4, true);
+    }
+    const fat = [];
+    for (const s of fatSecs) { const o = off(s); for (let i = 0; i < secSize / 4; i++) fat.push(dv.getUint32(o + i * 4, true)); }
+    const chain = (start, table) => { const r = []; let s = start, g = 0; while (s < 0xFFFFFFFA && g++ < 1e7) { r.push(s); s = table[s]; } return r; };
+    const readChain = (start, size) => {
+      const secs = chain(start, fat), out = new Uint8Array(secs.length * secSize);
+      secs.forEach((s, i) => out.set(u8.subarray(off(s), off(s) + secSize), i * secSize));
+      return size == null ? out : out.subarray(0, size);
+    };
+    const dir = readChain(dirStart), ddv = new DataView(dir.buffer);
+    const entries = [];
+    for (let o = 0; o + 128 <= dir.length; o += 128) {
+      const nl = ddv.getUint16(o + 64, true);
+      let name = ''; for (let i = 0; i < Math.max(0, nl / 2 - 1); i++) name += String.fromCharCode(ddv.getUint16(o + i * 2, true));
+      entries.push({ name, type: dir[o + 66], start: ddv.getUint32(o + 116, true), size: ddv.getUint32(o + 120, true) });
+    }
+    const root = entries[0];
+    let ministream = null, minifat = null;
+    const get = name => {
+      const e = entries.find(x => x.type === 2 && x.name.toLowerCase() === name.toLowerCase());
+      if (!e) return null;
+      if (e.size >= miniCutoff) return readChain(e.start, e.size);
+      if (!ministream) {
+        ministream = readChain(root.start, root.size);
+        const mf = readChain(miniFatStart), mdv = new DataView(mf.buffer); minifat = [];
+        for (let i = 0; i < nMiniFat * secSize / 4; i++) minifat.push(mdv.getUint32(i * 4, true));
+      }
+      const secs = chain(e.start, minifat), out = new Uint8Array(secs.length * miniSize);
+      secs.forEach((s, i) => out.set(ministream.subarray(s * miniSize, (s + 1) * miniSize), i * miniSize));
+      return out.subarray(0, e.size);
+    };
+    return { get };
+  }
+
+  // ---------- BIFF8: SUPBOOK / XCT / CRN ----------
+  function readXlsExternalCache(buf) {
+    const cfb = readCFB(buf);
+    const wb = cfb.get('Workbook') || cfb.get('Book');
+    if (!wb) throw new Error('Không tìm thấy luồng Workbook trong file .xls.');
+    const dv = new DataView(wb.buffer, wb.byteOffset, wb.byteLength);
+    const readUStr = (p, cch) => { // returns [string, newPos]
+      const flags = wb[p++]; const hi = flags & 1, rich = flags & 8, ext = flags & 4;
+      let runs = 0, extLen = 0;
+      if (rich) { runs = dv.getUint16(p, true); p += 2; }
+      if (ext) { extLen = dv.getUint32(p, true); p += 4; }
+      let s = '';
+      for (let i = 0; i < cch; i++) { if (hi) { s += String.fromCharCode(dv.getUint16(p, true)); p += 2; } else s += String.fromCharCode(wb[p++]); }
+      return [s, p + runs * 4 + extLen];
+    };
+    const books = []; let cur = null, curSheet = null;
+    let p = 0;
+    while (p + 4 <= wb.length) {
+      const type = dv.getUint16(p, true), len = dv.getUint16(p + 2, true), d = p + 4; p = d + len;
+      try {
+        if (type === 0x01AE) { // SUPBOOK
+          const ctab = dv.getUint16(d, true), cch = dv.getUint16(d + 2, true);
+          if (cch >= 0x0001 && cch < 0x0401 && cch !== 0x0401 && len > 4) {
+            let [path, q] = readUStr(d + 4, cch); const sheets = [];
+            for (let i = 0; i < ctab; i++) { const c = dv.getUint16(q, true); let s; [s, q] = readUStr(q + 2, c); sheets.push(s); }
+            cur = { path: path.replace(/[\x00-\x08]/g, '/'), sheets, cache: {} }; books.push(cur);
+          } else cur = null;
+        } else if (type === 0x0059 && cur) { // XCT
+          const itab = dv.getUint16(d + 2, true); const nm = cur.sheets[itab] ?? ('#' + itab);
+          curSheet = cur.cache[nm] = cur.cache[nm] || new Map();
+        } else if (type === 0x005A && cur && curSheet) { // CRN
+          const colLast = wb[d], colFirst = wb[d + 1], row = dv.getUint16(d + 2, true); let q = d + 4;
+          for (let c = colFirst; c <= colLast && q < d + len; c++) {
+            const t = wb[q++]; let v = null;
+            if (t === 0x01) { v = dv.getFloat64(q, true); q += 8; }
+            else if (t === 0x02) { const cch = dv.getUint16(q, true); [v, q] = readUStr(q + 2, cch); }
+            else if (t === 0x04) { v = !!wb[q]; q += 8; }
+            else { q += 8; }
+            if (v !== null) curSheet.set(row + ',' + c, v);
+          }
+        }
+      } catch (e) { /* bỏ qua record lỗi */ }
+    }
+    return books;
+  }
+
+  // Lấy bảng STT -> {B, C, ...} từ 1 sheet cache (cột A = STT)
+  function tableBySTT(map) {
+    const rows = {};
+    for (const [k, v] of map) { const [r, c] = k.split(',').map(Number); (rows[r] = rows[r] || {})[c] = v; }
+    const out = new Map();
+    for (const r in rows) { const a = rows[r][0]; if (typeof a === 'number' && Number.isInteger(a)) out.set(a, rows[r]); }
+    return out;
+  }
+  const isPH = v => typeof v === 'number' && v >= 4 && v <= 9.5;
+  const isSG = v => typeof v === 'number' && v >= 1.0 && v <= 1.06;
+
+  function findNTSource(books) {
+    let best = null;
+    for (const b of books) for (const sh in b.cache) {
+      const t = tableBySTT(b.cache[sh]); let score = 0;
+      for (const [, r] of t) if (isPH(r[1]) && isSG(r[2])) score++;
+      const bonus = /th[oô]ng s[oố] nt/i.test(norm(sh)) ? 1e6 : 0;
+      if (score > 0 && (!best || score + bonus > best.score)) best = { book: b, sheet: sh, table: t, score: score + bonus };
+    }
+    return best;
+  }
+  function findNameSource(books, jbNames /* Map stt->name */) {
+    let best = null;
+    for (const b of books) for (const sh in b.cache) {
+      const t = tableBySTT(b.cache[sh]); let hit = 0;
+      for (const [stt, r] of t) if (typeof r[1] === 'string' && jbNames.has(stt) && norm(jbNames.get(stt)) === norm(r[1])) hit++;
+      if (hit > 0 && (!best || hit > best.hit)) best = { book: b, sheet: sh, table: t, hit };
+    }
+    return best;
+  }
+
+  // ---------- ZIP ----------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = u8 => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  async function streamThrough(u8, ts) { const s = new Blob([u8]).stream().pipeThrough(ts); return new Uint8Array(await new Response(s).arrayBuffer()); }
+  const inflate = u8 => streamThrough(u8, new DecompressionStream('deflate-raw'));
+  const deflate = u8 => streamThrough(u8, new CompressionStream('deflate-raw'));
+
+  function readZip(buf) {
+    const u8 = new Uint8Array(buf), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    let e = u8.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error('File công ty không phải .xlsx hợp lệ.');
+    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const files = [];
+    for (let i = 0; i < n; i++) {
+      const method = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true), csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+      const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true);
+      const name = td.decode(u8.subarray(p + 46, p + 46 + nl));
+      const lnl = dv.getUint16(lo + 26, true), lxl = dv.getUint16(lo + 28, true), ds = lo + 30 + lnl + lxl;
+      files.push({ name, method, crc, csize, usize, raw: u8.subarray(ds, ds + csize) });
+      p += 46 + nl + xl + cl;
+    }
+    return files;
+  }
+  async function unzipText(f) { return td.decode(f.method === 0 ? f.raw : await inflate(f.raw)); }
+  async function writeZip(files) {
+    const parts = [], cen = []; let off = 0;
+    for (const f of files) {
+      let raw = f.raw, method = f.method, crc = f.crc, usize = f.usize;
+      if (f.newData) { usize = f.newData.length; crc = crc32(f.newData); raw = await deflate(f.newData); method = 8; }
+      const nm = te.encode(f.name), h = new Uint8Array(30 + nm.length), hv = new DataView(h.buffer);
+      hv.setUint32(0, 0x04034b50, true); hv.setUint16(4, 20, true); hv.setUint16(6, 0x0800, true); hv.setUint16(8, method, true);
+      hv.setUint32(14, crc, true); hv.setUint32(18, raw.length, true); hv.setUint32(22, usize, true); hv.setUint16(26, nm.length, true); h.set(nm, 30);
+      const c = new Uint8Array(46 + nm.length), cv = new DataView(c.buffer);
+      cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(10, method, true);
+      cv.setUint32(16, crc, true); cv.setUint32(20, raw.length, true); cv.setUint32(24, usize, true); cv.setUint16(28, nm.length, true); cv.setUint32(42, off, true); c.set(nm, 46);
+      parts.push(h, raw); cen.push(c); off += h.length + raw.length;
+    }
+    const cs = cen.reduce((a, b) => a + b.length, 0), end = new Uint8Array(22), ev = new DataView(end.buffer);
+    ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true); ev.setUint32(12, cs, true); ev.setUint32(16, off, true);
+    return new Blob([...parts, ...cen, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  // ---------- XLSX helpers ----------
+  const colToNum = s => { let n = 0; for (const ch of s) n = n * 26 + ch.charCodeAt(0) - 64; return n; };
+  const numToCol = n => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+  const unesc = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d)).replace(/&amp;/g, '&');
+  const attr = (tag, a) => { const m = tag.match(new RegExp('\\s' + a + '="([^"]*)"')); return m ? m[1] : null; };
+
+  function parseSST(xml) {
+    const out = [];
+    for (const m of xml.matchAll(/<si>([\s\S]*?)<\/si>/g)) out.push(unesc([...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join('')));
+    return out;
+  }
+  function cellText(cxml, sst) {
+    const t = attr(cxml.match(/^<c[^>]*>/)[0], 't'); const v = cxml.match(/<v>([\s\S]*?)<\/v>/);
+    if (t === 's' && v) return sst[+v[1]] ?? '';
+    if (t === 'inlineStr') return unesc([...cxml.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join(''));
+    return v ? unesc(v[1]) : '';
+  }
+  const cellRe = /<c\s[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g;
+
+  async function processJB(jbBuf, xlsBuf, log = () => {}) {
+    const books = readXlsExternalCache(xlsBuf);
+    log(`Phiếu xét nghiệm liên kết tới ${books.length} file ngoài.`);
+    const files = readZip(jbBuf);
+    const F = n => files.find(f => f.name === n);
+    const wbXml = await unzipText(F('xl/workbook.xml'));
+    const relXml = await unzipText(F('xl/_rels/workbook.xml.rels'));
+    const sst = F('xl/sharedStrings.xml') ? parseSST(await unzipText(F('xl/sharedStrings.xml'))) : [];
+    const sheets = [...wbXml.matchAll(/<sheet\s[^>]*\/>/g)].map(m => ({ name: unesc(attr(m[0], 'name')), rid: attr(m[0], 'r:id') }));
+    const rels = Object.fromEntries([...relXml.matchAll(/<Relationship\s[^>]*\/>/g)].map(m => [attr(m[0], 'Id'), attr(m[0], 'Target')]));
+
+    // tìm sheet có tiêu đề tỷ trọng + pH
+    let target = null;
+    for (const sh of sheets) {
+      let tg = rels[sh.rid]; if (!tg) continue; tg = tg.replace(/^\//, ''); if (!tg.startsWith('xl/')) tg = 'xl/' + tg;
+      const f = F(tg); if (!f) continue;
+      const xml = await unzipText(f);
+      let sgCol = null, phCol = null, nameCol = null, hdrRow = 0;
+      for (const rm of xml.matchAll(/<row\s[^>]*>([\s\S]*?)<\/row>/g)) {
+        const r = +attr(rm[0].match(/^<row[^>]*>/)[0], 'r');
+        for (const cm of rm[1].matchAll(cellRe)) {
+          const ref = attr(cm[0].match(/^<c[^>]*?>|^<c[^>]*?\/>/)[0], 'r'); const tx = norm(cellText(cm[0], sst));
+          const col = colToNum(ref.replace(/\d+/g, ''));
+          if (/^t[ỷỉ] tr[ọo]ng$/.test(tx)) { sgCol = col; hdrRow = Math.max(hdrRow, r); }
+          else if (tx === 'ph') { phCol = col; hdrRow = Math.max(hdrRow, r); }
+          else if (/^h[ọo] (v[àa] )?t[êe]n$/.test(tx) && !nameCol) nameCol = col;
+        }
+        if (sgCol && phCol && r > hdrRow + 2) break;
+      }
+      if (sgCol && phCol) { target = { sh, file: f, xml, sgCol, phCol, nameCol: nameCol || 2, hdrRow }; break; }
+    }
+    if (!target) throw new Error('Không tìm thấy sheet nào trong file công ty có cột "tỷ trọng" và "pH".');
+    log(`Sheet "${target.sh.name}": tỷ trọng = cột ${numToCol(target.sgCol)}, pH = cột ${numToCol(target.phCol)}.`);
+
+    // đọc danh sách người: STT (cột A) + tên
+    const people = []; const rowsXml = new Map();
+    for (const rm of target.xml.matchAll(/<row\s[^>]*>([\s\S]*?)<\/row>|<row\s[^>]*\/>/g)) {
+      const r = +attr(rm[0].match(/^<row[^>]*>/)[0], 'r'); rowsXml.set(r, rm[0]);
+      if (r <= target.hdrRow) continue;
+      let stt = null, name = '';
+      for (const cm of (rm[1] || '').matchAll(cellRe)) {
+        const ref = attr(cm[0].match(/^<c[^>]*?(?:>|\/>)/)[0], 'r'); const col = colToNum(ref.replace(/\d+/g, ''));
+        if (col === 1) { const t = cellText(cm[0], sst); if (t !== '' && !isNaN(+t)) stt = +t; else if (/<f>\s*ROW\(\)\s*-\s*(\d+)\s*<\/f>/i.test(cm[0])) stt = r - +cm[0].match(/ROW\(\)\s*-\s*(\d+)/i)[1]; }
+        if (col === target.nameCol) name = nfc(cellText(cm[0], sst));
+      }
+      if (name && stt != null) people.push({ row: r, stt, name });
+    }
+    if (!people.length) throw new Error('Không đọc được danh sách nhân viên (STT + họ tên) trong file công ty.');
+    const jbNames = new Map(people.map(p => [p.stt, p.name]));
+
+    const nt = findNTSource(books);
+    if (!nt) throw new Error('Không tìm thấy dữ liệu pH / tỉ trọng trong phiếu xét nghiệm (sheet "THÔNG SỐ NT"). Hãy mở phiếu trong Excel, bấm Update/Cập nhật liên kết, lưu lại rồi thử lại.');
+    log(`Nguồn pH/tỉ trọng: "${nt.sheet}" trong ${nt.book.path.split('/').pop()} (${nt.table.size} STT).`);
+    const ns = findNameSource(books, jbNames);
+    if (ns) log(`Nguồn họ tên trên phiếu: "${ns.sheet}" trong ${ns.book.path.split('/').pop()}.`);
+    else log('⚠ Phiếu không có bản lưu họ tên khớp với file công ty — chỉ ghép theo STT.');
+
+    // styles: thêm định dạng 0.000 và 0.0
+    const stF = F('xl/styles.xml'); let st = await unzipText(stF);
+    const fmtId = code => {
+      const m = [...st.matchAll(/<numFmt\s[^>]*\/>/g)].find(x => unesc(attr(x[0], 'formatCode')) === code);
+      if (m) return +attr(m[0], 'numFmtId');
+      const ids = [...st.matchAll(/numFmtId="(\d+)"/g)].map(x => +x[1]); const id = Math.max(163, ...ids) + 1;
+      const tag = `<numFmt numFmtId="${id}" formatCode="${code}"/>`;
+      if (/<numFmts[^>]*>/.test(st)) st = st.replace(/<numFmts([^>]*)count="(\d+)"([^>]*)>/, (_, a, c, b) => `<numFmts${a}count="${+c + 1}"${b}>`).replace('</numFmts>', tag + '</numFmts>');
+      else st = st.replace(/(<styleSheet[^>]*>)/, `$1<numFmts count="1">${tag}</numFmts>`);
+      return id;
+    };
+    const xfs = () => { const m = st.match(/<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/); return [...m[1].matchAll(/<xf\s[^>]*?(?:\/>|>[\s\S]*?<\/xf>)/g)].map(x => x[0]); };
+    const xfCache = {};
+    const styleWith = (sIdx, code) => {
+      const key = sIdx + '|' + code; if (key in xfCache) return xfCache[key];
+      const id = fmtId(code); const list = xfs(); let xf = list[sIdx] || list[0];
+      xf = xf.replace(/\snumFmtId="\d+"/, '').replace(/^<xf/, `<xf numFmtId="${id}"`);
+      xf = /applyNumberFormat=/.test(xf) ? xf.replace(/applyNumberFormat="\d"/, 'applyNumberFormat="1"') : xf.replace(/^<xf/, '<xf applyNumberFormat="1"');
+      const n = list.length;
+      st = st.replace(/<\/cellXfs>/, () => xf + '</cellXfs>').replace(/<cellXfs([^>]*)count="\d+"/, `<cellXfs$1count="${n + 1}"`);
+      return (xfCache[key] = n);
+    };
+
+    const report = []; let sheetXml = target.xml;
+    const setCell = (rowXml, r, col, val, code) => {
+      const ref = numToCol(col) + r;
+      const reCell = new RegExp(`<c\\s[^>]*\\br="${ref}"[^>]*?(?:\\/>|>[\\s\\S]*?<\\/c>)`);
+      const old = rowXml.match(reCell);
+      const s = old ? +(attr(old[0].match(/^<c[^>]*?(?:>|\/>)/)[0], 's') || 0) : 0;
+      const nc = `<c r="${ref}" s="${styleWith(s, code)}"><v>${val}</v></c>`;
+      if (old) return rowXml.replace(old[0], () => nc);
+      if (/\/>$/.test(rowXml) && !/<\/row>$/.test(rowXml)) return rowXml.replace(/\/>$/, `>${nc}</row>`);
+      // chèn đúng thứ tự cột
+      const cells = [...rowXml.matchAll(cellRe)];
+      const after = cells.find(c => colToNum(attr(c[0].match(/^<c[^>]*?(?:>|\/>)/)[0], 'r').replace(/\d+/g, '')) > col);
+      return after ? rowXml.replace(after[0], () => nc + after[0]) : rowXml.replace('</row>', () => nc + '</row>');
+    };
+    let filled = 0;
+    for (const p of people) {
+      const rec = nt.table.get(p.stt);
+      const phieuName = ns ? ns.table.get(p.stt)?.[1] : null;
+      const nameOk = !ns || (phieuName != null && norm(phieuName) === norm(p.name));
+      const item = { stt: p.stt, row: p.row, name: p.name, phieuName: phieuName ?? '', ph: null, sg: null, status: '' };
+      if (!rec || !isPH(rec[1]) || !isSG(rec[2])) item.status = 'Không có số liệu';
+      else if (!nameOk) { item.status = 'Lệch tên – bỏ qua'; item.ph = rec[1]; item.sg = rec[2]; }
+      else {
+        item.ph = rec[1]; item.sg = rec[2]; item.status = 'Đã điền';
+        let rx = rowsXml.get(p.row);
+        rx = setCell(rx, p.row, target.sgCol, rec[2], '0.000');
+        rx = setCell(rx, p.row, target.phCol, rec[1], '0.0');
+        sheetXml = sheetXml.replace(rowsXml.get(p.row), () => rx); rowsXml.set(p.row, rx); filled++;
+      }
+      report.push(item);
+    }
+    target.file.newData = te.encode(sheetXml);
+    stF.newData = te.encode(st);
+    const blob = await writeZip(files);
+    return { blob, report, filled, sheet: target.sh.name };
+  }
+
+  return { processJB, readXlsExternalCache, _zip: { readZip, unzipText } };
+})();
+if (typeof module !== 'undefined') module.exports = XLCore;
+{
+const st={xn:null,jb:null,out:null,rep:[]};const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function take(file){
+  const b=new Uint8Array(await file.slice(0,8).arrayBuffer());
+  const k=b[0]===0xD0&&b[1]===0xCF?'xn':b[0]===0x50&&b[1]===0x4B?'jb':null;
+  if(!k){$('err').textContent='“'+file.name+'” không phải file Excel .xls/.xlsx.';return}
+  st[k]=file;const d=$(k==='xn'?'dXn':'dJb');d.classList.add('ok');d.querySelector('.fn').textContent=file.name;
+  $('err').textContent='';$('run').disabled=!(st.xn&&st.jb);
+}
+document.querySelectorAll('.drop input').forEach(i=>i.addEventListener('change',e=>{[...e.target.files].forEach(take);e.target.value=''}));
+document.querySelectorAll('.drop').forEach(d=>{
+  d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over')});
+  d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('over');[...e.dataTransfer.files].forEach(take)});
+});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].forEach(take)});
+let filt='all';
+function render(){
+  const rows=st.rep.filter(r=>filt==='all'||r.status!=='Đã điền');
+  $('tb').innerHTML=rows.map(r=>`<tr class="${r.status==='Đã điền'?'':r.status.startsWith('Lệch')?'x':'w'}"><td class="n">${r.stt}</td><td class="n">${r.row}</td><td>${esc(r.name)}</td><td>${esc(r.phieuName)}</td><td class="n">${r.sg==null?'':r.sg.toFixed(3)}</td><td class="n">${r.ph==null?'':r.ph.toFixed(1)}</td><td>${esc(r.status)}</td></tr>`).join('')||'<tr><td colspan="7">Không có dòng nào có vấn đề.</td></tr>';
+}
+$('flt').addEventListener('click',e=>{const f=e.target.dataset.f;if(!f)return;filt=f;$('flt').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));render()});
+$('run').addEventListener('click',async()=>{
+  $('err').textContent='';$('log').textContent='Đang xử lý…';$('run').disabled=true;$('dl').disabled=true;
+  const logs=[];
+  try{
+    const r=await XLCore.processJB(await st.jb.arrayBuffer(),await st.xn.arrayBuffer(),m=>logs.push(m));
+    st.out=r.blob;st.rep=r.report;
+    const bad=r.report.filter(x=>x.status!=='Đã điền').length;
+    $('stats').innerHTML=`<div class="st"><span>${r.filled}</span>đã điền</div><div class="st b"><span>${bad}</span>bỏ qua</div><div class="st"><span>${r.report.length}</span>người trong danh sách</div>`;
+    $('log').textContent=logs.join('\n');$('res').hidden=false;$('dl').disabled=!r.filled;render();
+  }catch(e){$('err').textContent='Lỗi: '+e.message;$('log').textContent=logs.join('\n')}
+  $('run').disabled=false;
+});
+$('dl').addEventListener('click',()=>{
+  if(!st.out)return;const a=document.createElement('a');a.href=URL.createObjectURL(st.out);
+  a.download=st.jb.name.replace(/\.xlsx$/i,'')+'_da_dien.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+$('reset').addEventListener('click',()=>{st.xn=st.jb=st.out=null;st.rep=[];document.querySelectorAll('.drop').forEach(d=>{d.classList.remove('ok');d.querySelector('.fn').textContent=''});['stats','log','err'].forEach(i=>$(i).innerHTML='');$('res').hidden=true;$('run').disabled=$('dl').disabled=true});
+}
+</script></body></html>

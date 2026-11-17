@@ -1,5 +1,7 @@
 # Tool điền pH & Tỉ trọng
 
+🌐 **Dùng online:** https://automationdq.github.io/Tool_Dien_pH_TiTrong/ — file xử lý ngay trên trình duyệt, không tải lên máy chủ.
+
 Đọc phiếu xét nghiệm (.xls), lấy pH và tỉ trọng theo SỐ THỨ TỰ, đối chiếu họ tên rồi ghi vào file công ty (.xlsx).
 
 ## Dùng
