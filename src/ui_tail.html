@@ -1,0 +1,43 @@
+{
+const st={xn:null,jb:null,out:null,rep:[]};const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function take(file){
+  const b=new Uint8Array(await file.slice(0,8).arrayBuffer());
+  const k=b[0]===0xD0&&b[1]===0xCF?'xn':b[0]===0x50&&b[1]===0x4B?'jb':null;
+  if(!k){$('err').textContent='“'+file.name+'” không phải file Excel .xls/.xlsx.';return}
+  st[k]=file;const d=$(k==='xn'?'dXn':'dJb');d.classList.add('ok');d.querySelector('.fn').textContent=file.name;
+  $('err').textContent='';$('run').disabled=!(st.xn&&st.jb);
+}
+document.querySelectorAll('.drop input').forEach(i=>i.addEventListener('change',e=>{[...e.target.files].forEach(take);e.target.value=''}));
+document.querySelectorAll('.drop').forEach(d=>{
+  d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over')});
+  d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{e.preventDefault();d.classList.remove('over');[...e.dataTransfer.files].forEach(take)});
+});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].forEach(take)});
+let filt='all';
+function render(){
+  const rows=st.rep.filter(r=>filt==='all'||r.status!=='Đã điền');
+  $('tb').innerHTML=rows.map(r=>`<tr class="${r.status==='Đã điền'?'':r.status.startsWith('Lệch')?'x':'w'}"><td class="n">${r.stt}</td><td class="n">${r.row}</td><td>${esc(r.name)}</td><td>${esc(r.phieuName)}</td><td class="n">${r.sg==null?'':r.sg.toFixed(3)}</td><td class="n">${r.ph==null?'':r.ph.toFixed(1)}</td><td>${esc(r.status)}</td></tr>`).join('')||'<tr><td colspan="7">Không có dòng nào có vấn đề.</td></tr>';
+}
+$('flt').addEventListener('click',e=>{const f=e.target.dataset.f;if(!f)return;filt=f;$('flt').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));render()});
+$('run').addEventListener('click',async()=>{
+  $('err').textContent='';$('log').textContent='Đang xử lý…';$('run').disabled=true;$('dl').disabled=true;
+  const logs=[];
+  try{
+    const r=await XLCore.processJB(await st.jb.arrayBuffer(),await st.xn.arrayBuffer(),m=>logs.push(m));
+    st.out=r.blob;st.rep=r.report;
+    const bad=r.report.filter(x=>x.status!=='Đã điền').length;
+    $('stats').innerHTML=`<div class="st"><span>${r.filled}</span>đã điền</div><div class="st b"><span>${bad}</span>bỏ qua</div><div class="st"><span>${r.report.length}</span>người trong danh sách</div>`;
+    $('log').textContent=logs.join('\n');$('res').hidden=false;$('dl').disabled=!r.filled;render();
+  }catch(e){$('err').textContent='Lỗi: '+e.message;$('log').textContent=logs.join('\n')}
+  $('run').disabled=false;
+});
+$('dl').addEventListener('click',()=>{
+  if(!st.out)return;const a=document.createElement('a');a.href=URL.createObjectURL(st.out);
+  a.download=st.jb.name.replace(/\.xlsx$/i,'')+'_da_dien.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+$('reset').addEventListener('click',()=>{st.xn=st.jb=st.out=null;st.rep=[];document.querySelectorAll('.drop').forEach(d=>{d.classList.remove('ok');d.querySelector('.fn').textContent=''});['stats','log','err'].forEach(i=>$(i).innerHTML='');$('res').hidden=true;$('run').disabled=$('dl').disabled=true});
+}
+</script></body></html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Điền pH & Tỉ trọng</title>
+<style>
+/* VOICE: công cụ văn phòng, gọn, rõ
+   IDEA: tờ phiếu kết quả xét nghiệm
+   PICTURE: hai ô thả file + bảng đối chiếu
+   COLOUR/TYPE: trắng đen + mint, Inter hệ thống
+   LAYOUT: một cột, tiêu đề, 2 ô thả, nút, bảng */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0d0f0e);--ink:light-dark(#111,#eef3f0);--mut:light-dark(#5b625e,#9aa39e);--line:light-dark(#e3e6e4,#2a2e2c);--mint:#b8f5d0;--mintd:light-dark(#0f6b3a,#8ff0b9);--bad:light-dark(#b42318,#ff8a80);--warn:light-dark(#9a6700,#f5c451)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(20px,4vw,48px) max(4vw,16px)}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.1;margin:0 0 6px}
+.sub{color:var(--mut);margin:0 0 24px}
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:22px;min-height:130px;cursor:pointer;transition:background .15s,border-color .15s;position:relative}
+.drop:hover,.drop.over{border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 18%,transparent)}
+.drop.ok{border-style:solid;border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 28%,transparent)}
+.drop b{display:block;font-size:17px}.drop small{color:var(--mut)}.drop .fn{margin-top:8px;font-weight:600;word-break:break-all}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:20px 0}
+button{font:inherit;font-weight:600;min-height:44px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;background:var(--ink);color:var(--bg)}
+button.alt{background:var(--mint);color:#06301a}button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible,.drop:focus-within{outline:3px solid var(--mintd);outline-offset:2px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.st{padding:10px 16px;border-radius:10px;background:color-mix(in srgb,var(--mint) 30%,transparent)}.st span{font-size:24px;font-weight:700;margin-right:6px}
+.st.b{background:color-mix(in srgb,var(--bad) 14%,transparent)}
+#log{color:var(--mut);font-size:14px;margin:12px 0;white-space:pre-line}
+#err{color:var(--bad);font-weight:600;white-space:pre-line}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;max-height:60vh}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--bg);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.x td{color:var(--bad)}tr.w td{color:var(--warn)}
+.flt{display:flex;gap:6px;margin:14px 0 8px;flex-wrap:wrap}.flt button{min-height:36px;padding:0 14px;background:transparent;color:var(--ink);border:1px solid var(--line)}.flt button.on{background:var(--ink);color:var(--bg)}
+.note{font-size:13px;color:var(--mut);margin-top:22px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><div class="wrap">
+<h1>Điền pH & tỉ trọng vào danh sách công ty</h1>
+<p class="sub">Thả phiếu xét nghiệm (.xls) và file công ty (.xlsx). Tool tìm theo số thứ tự, đối chiếu đúng họ tên rồi mới điền tỉ trọng (3 số lẻ) và pH, không làm tròn.</p>
+<div class="drops">
+ <label class="drop" id="dXn"><input type="file" accept=".xls" data-k="xn"><b>1. Phiếu xét nghiệm</b><small>File .xls có ô SỐ THỨ TỰ</small><div class="fn"></div></label>
+ <label class="drop" id="dJb"><input type="file" accept=".xlsx" data-k="jb"><b>2. File công ty</b><small>File .xlsx có cột “tỷ trọng” và “pH”</small><div class="fn"></div></label>
+</div>
+<div class="bar"><button id="run" disabled>Chạy đối chiếu</button><button id="dl" class="alt" disabled>Tải file đã điền</button><button id="reset" style="background:transparent;color:var(--ink);border:1px solid var(--line)">Làm lại</button></div>
+<div id="err"></div><div class="stats" id="stats"></div><div id="log"></div>
+<div id="res" hidden><div class="flt" id="flt"><button data-f="all" class="on">Tất cả</button><button data-f="bad">Chỉ dòng có vấn đề</button></div>
+<div class="scroll"><table><thead><tr><th>STT</th><th>Dòng</th><th>Họ tên (file công ty)</th><th>Họ tên (phiếu)</th><th>Tỉ trọng</th><th>pH</th><th>Trạng thái</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<p class="note">Chạy hoàn toàn trên máy bạn, không gửi dữ liệu đi đâu. Nếu báo không tìm thấy số liệu: mở phiếu xét nghiệm trong Excel → Data → Edit Links → Update Values, lưu lại rồi chạy lại.</p>
+</div>
+<script>

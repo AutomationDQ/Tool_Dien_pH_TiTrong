@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App điền pH & Tỉ trọng</title>
+<style>
+/* VOICE: công cụ văn phòng, gọn, rõ
+   IDEA: tờ phiếu kết quả xét nghiệm
+   PICTURE: hai ô thả file + bảng đối chiếu
+   COLOUR/TYPE: trắng đen + mint, Inter hệ thống
+   LAYOUT: một cột, tiêu đề, 2 ô thả, nút, bảng */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0d0f0e);--ink:light-dark(#111,#eef3f0);--mut:light-dark(#5b625e,#9aa39e);--line:light-dark(#e3e6e4,#2a2e2c);--mint:#b8f5d0;--mintd:light-dark(#0f6b3a,#8ff0b9);--bad:light-dark(#b42318,#ff8a80);--warn:light-dark(#9a6700,#f5c451)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,"Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:clamp(20px,4vw,48px) max(4vw,16px)}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.1;margin:0 0 6px}
+.sub{color:var(--mut);margin:0 0 24px}
+.drops{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:22px;min-height:130px;cursor:pointer;transition:background .15s,border-color .15s;position:relative}
+.drop:hover,.drop.over{border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 18%,transparent)}
+.drop.ok{border-style:solid;border-color:var(--mintd);background:color-mix(in srgb,var(--mint) 28%,transparent)}
+.drop b{display:block;font-size:17px}.drop small{color:var(--mut)}.drop .fn{margin-top:8px;font-weight:600;word-break:break-all}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:20px 0}
+button{font:inherit;font-weight:600;min-height:44px;padding:0 20px;border-radius:10px;border:0;cursor:pointer;background:var(--ink);color:var(--bg)}
+button.alt{background:var(--mint);color:#06301a}button:disabled{opacity:.35;cursor:not-allowed}
+button:focus-visible,.drop:focus-within{outline:3px solid var(--mintd);outline-offset:2px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.st{padding:10px 16px;border-radius:10px;background:color-mix(in srgb,var(--mint) 30%,transparent)}.st span{font-size:24px;font-weight:700;margin-right:6px}
+.st.b{background:color-mix(in srgb,var(--bad) 14%,transparent)}
+#log{color:var(--mut);font-size:14px;margin:12px 0;white-space:pre-line}
+#err{color:var(--bad);font-weight:600;white-space:pre-line}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;max-height:60vh}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{position:sticky;top:0;background:var(--bg);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.x td{color:var(--bad)}tr.w td{color:var(--warn)}
+.flt{display:flex;gap:6px;margin:14px 0 8px;flex-wrap:wrap}.flt button{min-height:36px;padding:0 14px;background:transparent;color:var(--ink);border:1px solid var(--line)}.flt button.on{background:var(--ink);color:var(--bg)}
+.outbox{font-size:14px;color:var(--mut);margin:-6px 0 12px}.outbox code{color:var(--ink);word-break:break-all}
+#saved{font-weight:600;color:var(--mintd);margin:8px 0;word-break:break-all}
+.note{font-size:13px;color:var(--mut);margin-top:22px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><div class="wrap">
+<h1>Điền pH & tỉ trọng vào danh sách công ty</h1>
+<p class="sub">Thả phiếu xét nghiệm (.xls) và file công ty (.xlsx), đủ 2 file là tool tự chạy. Chỉ điền khi họ tên khớp; tỉ trọng 3 số lẻ, pH 1 số lẻ, không làm tròn. File kết quả <b>tự lưu</b> vào thư mục bên dưới.</p>
+<div class="drops">
+ <label class="drop" id="dXn"><input type="file" accept=".xls" data-k="xn"><b>1. Phiếu xét nghiệm</b><small>File .xls có ô SỐ THỨ TỰ</small><div class="fn"></div></label>
+ <label class="drop" id="dJb"><input type="file" accept=".xlsx" data-k="jb"><b>2. File công ty</b><small>File .xlsx có cột “tỷ trọng” và “pH”</small><div class="fn"></div></label>
+</div>
+<div class="bar"><button id="run" disabled>Chạy đối chiếu</button><button id="open" class="alt">Mở thư mục kết quả</button><button id="reset" style="background:transparent;color:var(--ink);border:1px solid var(--line)">Làm lại</button></div>
+<div class="outbox">Lưu vào: <code id="outdir">…</code></div><div id="saved"></div><div id="err"></div><div class="stats" id="stats"></div><div id="log"></div>
+<div id="res" hidden><div class="flt" id="flt"><button data-f="all" class="on">Tất cả</button><button data-f="bad">Chỉ dòng có vấn đề</button></div>
+<div class="scroll"><table><thead><tr><th>STT</th><th>Dòng</th><th>Họ tên (file công ty)</th><th>Họ tên (phiếu)</th><th>Tỉ trọng</th><th>pH</th><th>Trạng thái</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<p class="note">App chạy trên máy bạn (127.0.0.1), không gửi dữ liệu ra ngoài. Đóng cửa sổ đen (terminal) để tắt app. Nếu báo không tìm thấy số liệu: mở phiếu xét nghiệm trong Excel → Data → Edit Links → Update Values, lưu lại rồi chạy lại.</p>
+</div>
+<script>
+{
+const st={xn:null,jb:null,rep:[],out:null};const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+fetch('/api/config').then(r=>r.json()).then(c=>$('outdir').textContent=c.outDir).catch(()=>$('err').textContent='Không kết nối được app. Hãy chạy lại Chay_Tool.bat.');
+const b64=async f=>{const u=new Uint8Array(await f.arrayBuffer());let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+async function take(file){
+  const b=new Uint8Array(await file.slice(0,8).arrayBuffer());
+  const k=b[0]===0xD0&&b[1]===0xCF?'xn':b[0]===0x50&&b[1]===0x4B?'jb':null;
+  if(!k){$('err').textContent='“'+file.name+'” không phải file Excel .xls/.xlsx.';return}
+  st[k]=file;const d=$(k==='xn'?'dXn':'dJb');d.classList.add('ok');d.querySelector('.fn').textContent=file.name;
+  $('err').textContent='';$('run').disabled=!(st.xn&&st.jb);
+  if(st.xn&&st.jb)run();   // đủ 2 file → tự chạy
+}
+document.querySelectorAll('.drop input').forEach(i=>i.addEventListener('change',e=>{[...e.target.files].forEach(take);e.target.value=''}));
+document.querySelectorAll('.drop').forEach(d=>{
+  d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('over')});
+  d.addEventListener('dragleave',()=>d.classList.remove('over'));
+  d.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();d.classList.remove('over');[...e.dataTransfer.files].forEach(take)});
+});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].forEach(take)});
+let filt='all',busy=false;
+function render(){
+  const rows=st.rep.filter(r=>filt==='all'||r.status!=='Đã điền');
+  $('tb').innerHTML=rows.map(r=>`<tr class="${r.status==='Đã điền'?'':r.status.startsWith('Lệch')?'x':'w'}"><td class="n">${r.stt}</td><td class="n">${r.row}</td><td>${esc(r.name)}</td><td>${esc(r.phieuName)}</td><td class="n">${r.sg==null?'':r.sg.toFixed(3)}</td><td class="n">${r.ph==null?'':r.ph.toFixed(1)}</td><td>${esc(r.status)}</td></tr>`).join('')||'<tr><td colspan="7">Không có dòng nào có vấn đề.</td></tr>';
+}
+$('flt').addEventListener('click',e=>{const f=e.target.dataset.f;if(!f)return;filt=f;$('flt').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===f));render()});
+async function run(){
+  if(busy||!(st.xn&&st.jb))return;busy=true;
+  $('err').textContent='';$('saved').textContent='';$('log').textContent='Đang xử lý…';$('run').disabled=true;
+  try{
+    const res=await fetch('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({xlsName:st.xn.name,xlsB64:await b64(st.xn),xlsxName:st.jb.name,xlsxB64:await b64(st.jb)})});
+    const r=await res.json();
+    if(!r.ok)throw new Error(r.error);
+    st.rep=r.report;st.out=r.outPath;
+    const bad=r.report.filter(x=>x.status!=='Đã điền').length;
+    $('stats').innerHTML=`<div class="st"><span>${r.filled}</span>đã điền</div><div class="st b"><span>${bad}</span>bỏ qua</div><div class="st"><span>${r.report.length}</span>người trong danh sách</div>`;
+    $('log').textContent=r.logs.join('\n')+`\nXử lý trong ${r.ms} ms.`;
+    $('saved').textContent=r.outPath?'✔ Đã lưu: '+r.outPath:'Không có dòng nào khớp nên không tạo file.';
+    $('res').hidden=false;render();
+  }catch(e){$('err').textContent='Lỗi: '+(e.message==='Failed to fetch'?'Mất kết nối với app — cửa sổ Chay_Tool.bat có bị đóng không?':e.message);$('log').textContent=''}
+  $('run').disabled=false;busy=false;
+}
+$('run').addEventListener('click',run);
+$('open').addEventListener('click',()=>fetch('/api/open-folder',{method:'POST',body:JSON.stringify({file:st.out})}).catch(()=>{}));
+$('reset').addEventListener('click',()=>{st.xn=st.jb=st.out=null;st.rep=[];document.querySelectorAll('.drop').forEach(d=>{d.classList.remove('ok');d.querySelector('.fn').textContent=''});['stats','log','err','saved'].forEach(i=>$(i).innerHTML='');$('res').hidden=true;$('run').disabled=true});
+}
+</script></body></html>

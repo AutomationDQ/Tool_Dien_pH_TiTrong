@@ -1,0 +1,17 @@
+# Dữ liệu nhân viên / kết quả — KHÔNG đưa lên GitHub
+*.xls
+*.xlsx
+*.xlsm
+*.csv
+input/*
+!input/README.txt
+output/*
+!output/README.txt
+test_out.xlsx
+~$*
+
+# Hệ thống / editor
+node_modules/
+.DS_Store
+Thumbs.db
+.vscode/
